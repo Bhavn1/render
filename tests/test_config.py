@@ -50,7 +50,7 @@ def config_none_db_url_values(base_config_values):
     """
     base_config_values["db_url"] = "None"
     yield base_config_values
-    os.environ.pop("DB_URL")
+    os.environ.pop("DB_URL", None)
 
 
 def test_config_db_url(base_config_values):
@@ -59,7 +59,7 @@ def test_config_db_url(base_config_values):
     Args:
         base_config_values: base_config_values fixture.
     """
-    os.environ.pop("DB_URL")
+    os.environ.pop("DB_URL", None)
     config = rx.Config(**base_config_values)
     assert config.db_url == base_config_values["db_url"]
 

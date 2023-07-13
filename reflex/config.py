@@ -203,6 +203,19 @@ class Config(Base):
     # Timeout when launching the gunicorn server.
     timeout: int = constants.TIMEOUT
 
+    # These fields are neither saved nor read from the environment
+    _no_environment_fields = {
+        "admin_dash",
+        "db_config",
+        "env",
+        "frontend_packages",
+        "override_os_envs",
+        "tailwind",
+    }
+
+    # These fields are never derived from constants (environment only)
+    _no_constants_fields = {"db_url"}
+
     def __init__(self, *args, **kwargs):
         """Initialize the config values.
 
@@ -217,12 +230,14 @@ class Config(Base):
 
         super().__init__(*args, **kwargs)
 
-        # set overriden class attribute values as os env variables to avoid losing them
+        # set overriden class attribute values as os env variables to update constants
+        constants_keys = dir(constants)
         for key, value in dict(self).items():
             key = key.upper()
             if (
                 key.startswith("_")
                 or key in os.environ
+                or key not in constants_keys
                 or (value is None and key != "DB_URL")
             ):
                 continue
@@ -231,22 +246,72 @@ class Config(Base):
         # Avoid overriding if env_path is not provided or does not exist
         if self.env_path is not None and os.path.isfile(self.env_path):
             load_dotenv(self.env_path, override=self.override_os_envs)  # type: ignore
-            # Recompute constants after loading env variables
-            importlib.reload(constants)
-            # Recompute instance attributes
-            self.recompute_field_values()
+        # Recompute constants after loading env variables
+        importlib.reload(constants)
+        # Recompute instance attributes
+        self.recompute_field_values()
+
+    def _update_field_from_constants(self, field: str) -> Optional[bool]:
+        """Derive the given field value from reflex.constants.
+
+        Args:
+            field: the config attribute to derive
+
+        Returns:
+            True if the field was updated
+        """
+        if field in self._no_constants_fields:
+            return
+        try:
+            new_value = getattr(constants, f"{field.upper()}")
+            if getattr(self, field) == new_value:
+                return
+            setattr(self, field, new_value)
+            return True
+        except AttributeError:
+            pass
+
+    def _update_field_from_environment(self, field: str) -> Optional[bool]:
+        """Derive the given field value from environment variables.
+
+        Args:
+            field: the config attribute to derive
+
+        Returns:
+            True if the field was updated
+        """
+        if field in self._no_environment_fields:
+            return
+        env_value = constants.get_value(
+            field.upper(),
+            default=None,
+            type_=self.__fields__[field].type_,
+        )
+        if env_value is not None:
+            super().__setattr__(field, env_value)
+            return True
 
     def recompute_field_values(self):
         """Recompute instance field values to reflect new values after reloading
         constant values.
         """
         for field in self.get_fields():
-            try:
-                if field.startswith("_"):
-                    continue
-                setattr(self, field, getattr(constants, f"{field.upper()}"))
-            except AttributeError:
-                pass
+            if field.startswith("_"):
+                continue
+            if self._update_field_from_constants(field):
+                continue
+            self._update_field_from_environment(field)
+
+    def __setattr__(self, key, value):
+        """Save override values to the environment to avoid losing them."""
+        super().__setattr__(key, value)
+        if (
+            key.startswith("_")
+            or key in self._no_environment_fields
+            or (value is None and key != "db_url")
+        ):
+            return  # not all variables are saved in the environment
+        os.environ[key.upper()] = str(value)
 
 
 def get_config() -> Config:
