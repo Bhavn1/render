@@ -28,7 +28,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
     - shell: pwsh
-      run: wsl --install -d Ubuntu
+      run: |
+        Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
+        wsl --install -d Ubuntu
     - uses: actions/checkout@v3
     - uses: ./.github/actions/setup_build_env
       with:
