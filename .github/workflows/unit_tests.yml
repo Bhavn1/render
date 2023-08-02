@@ -34,6 +34,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           run-poetry-install: true
           create-venv-at-path: .venv
+          shell: "wsl-bash {0}"
     - name: Run unit tests
       run: |
         export PYTHONUNBUFFERED=1
