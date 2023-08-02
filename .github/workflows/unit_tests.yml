@@ -27,6 +27,8 @@ jobs:
         python-version: ["3.11"]
     runs-on: ${{ matrix.os }}
     steps:
+    - shell: bash
+      run: wsl --install
     - uses: actions/checkout@v3
     - uses: ./.github/actions/setup_build_env
       with:
