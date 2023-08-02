@@ -51,7 +51,11 @@ runs:
     - name: Prepare PATH env to include where poetry will be installed into
       shell: ${{ inputs.shell }}
       run: |
-        echo "~/.local/bin/" >> $GITHUB_PATH
+        if [ -z "$GITHUB_PATH" ]; then
+            echo "~/.local/bin/" >> ~/.bashrc
+        else
+            echo "~/.local/bin/" >> $GITHUB_PATH
+        fi
 
     - name: Restore cached poetry install
       id: restore-poetry-cache
