@@ -27,9 +27,8 @@ jobs:
         python-version: ["3.11"]
     runs-on: ${{ matrix.os }}
     steps:
-    - shell: pwsh
+    - shell: cmd
       run: |
-        Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
         wsl --install -d Ubuntu
     - uses: actions/checkout@v3
     - uses: ./.github/actions/setup_build_env
