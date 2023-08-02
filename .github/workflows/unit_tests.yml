@@ -28,7 +28,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
     - shell: bash
-      run: wsl --install -d Ubuntu-22.04
+      run: wsl --install Ubuntu
     - uses: actions/checkout@v3
     - uses: ./.github/actions/setup_build_env
       with:
