@@ -277,7 +277,10 @@ class App(Base):
         title: str = constants.DEFAULT_TITLE,
         description: str = constants.DEFAULT_DESCRIPTION,
         image=constants.DEFAULT_IMAGE,
-        on_load: EventHandler | EventSpec | list[EventHandler | EventSpec] | None = None,
+        on_load: EventHandler
+        | EventSpec
+        | list[EventHandler | EventSpec]
+        | None = None,
         meta: list[dict[str, str]] = constants.DEFAULT_META_LIST,
         script_tags: list[Component] | None = None,
     ):
@@ -407,7 +410,10 @@ class App(Base):
         title: str = constants.TITLE_404,
         image: str = constants.FAVICON_404,
         description: str = constants.DESCRIPTION_404,
-        on_load: EventHandler | EventSpec | list[EventHandler | EventSpec] | None = None,
+        on_load: EventHandler
+        | EventSpec
+        | list[EventHandler | EventSpec]
+        | None = None,
         meta: list[dict[str, str]] = constants.DEFAULT_META_LIST,
     ):
         """Define a custom 404 page for any url having no match.
