@@ -9,7 +9,7 @@ import os
 import os.path as op
 import re
 import sys
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type
+from typing import TYPE_CHECKING, Any, Type
 
 import plotly.graph_objects as go
 from plotly.io import to_json
@@ -32,7 +32,7 @@ WRAP_MAP = {
 }
 
 
-def get_close_char(open: str, close: Optional[str] = None) -> str:
+def get_close_char(open: str, close: str | None = None) -> str:
     """Check if the given character is a valid brace.
 
     Args:
@@ -52,7 +52,7 @@ def get_close_char(open: str, close: Optional[str] = None) -> str:
     return WRAP_MAP[open]
 
 
-def is_wrapped(text: str, open: str, close: Optional[str] = None) -> bool:
+def is_wrapped(text: str, open: str, close: str | None = None) -> bool:
     """Check if the given text is wrapped in the given open and close characters.
 
     Args:
@@ -70,7 +70,7 @@ def is_wrapped(text: str, open: str, close: Optional[str] = None) -> bool:
 def wrap(
     text: str,
     open: str,
-    close: Optional[str] = None,
+    close: str | None = None,
     check_first: bool = True,
     num: int = 1,
 ) -> str:
@@ -239,7 +239,7 @@ def format_cond(
     return wrap(f"{cond} ? {true_value} : {false_value}", "{")
 
 
-def get_event_handler_parts(handler: EventHandler) -> Tuple[str, str]:
+def get_event_handler_parts(handler: EventHandler) -> tuple[str, str]:
     """Get the state and function name of an event handler.
 
     Args:
@@ -311,7 +311,7 @@ def format_event(event_spec: EventSpec) -> str:
     return f"E({', '.join(event_args)})"
 
 
-def format_query_params(router_data: Dict[str, Any]) -> Dict[str, str]:
+def format_query_params(router_data: dict[str, Any]) -> dict[str, str]:
     """Convert back query params name to python-friendly case.
 
     Args:
@@ -324,7 +324,7 @@ def format_query_params(router_data: Dict[str, Any]) -> Dict[str, str]:
     return {k.replace("-", "_"): v for k, v in params.items()}
 
 
-def format_dataframe_values(value: Type) -> List[Any]:
+def format_dataframe_values(value: Type) -> list[Any]:
     """Format dataframe values.
 
     Args:
