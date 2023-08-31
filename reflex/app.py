@@ -514,7 +514,7 @@ class App(Base):
 
         # Load the page hashes from file if exists.
         page_hashes = dict()
-        skipped_count = 0
+        keep_paths = set()
         if os.path.exists(constants.PAGE_HASHES_FILE):
             try:
                 with open(constants.PAGE_HASHES_FILE, "r") as f:
@@ -533,24 +533,27 @@ class App(Base):
                 # Render the component to get the Dict representation now.
                 component_render = component.render()
                 custom_codes = component.get_custom_code()
-
+                # Get the path for the output file.
+                output_path = compiler_utils.get_page_path(route)
                 if component_render or custom_codes:
                     new_checksum = hashlib.md5(
                         (str(component_render) + str(custom_codes)).encode()
                     ).hexdigest()
                     if page_hashes.get(route) == new_checksum:
-                        skipped_count += 1
+                        keep_paths.add(output_path)
                         continue
                     page_hashes[route] = new_checksum
                 compile_results.append(
-                    thread_pool.apply_async(
-                        compiler.compile_page,
-                        args=(
-                            route,
-                            component,
-                            custom_codes,
-                            self.state,
-                            component_render,
+                    (
+                        output_path,
+                        thread_pool.apply_async(
+                            compiler.compile_page,
+                            args=(
+                                component,
+                                custom_codes,
+                                self.state,
+                                component_render,
+                            ),
                         ),
                     )
                 )
@@ -560,7 +563,7 @@ class App(Base):
         thread_pool.join()
 
         console.debug(
-            f"Skipped re-rendering {skipped_count} pages out of total {len(self.pages)}"
+            f"Skipped re-rendering {len(keep_paths)} pages out of total {len(self.pages)}"
         )
         if page_hashes:
             try:
@@ -572,7 +575,7 @@ class App(Base):
                 )
 
         # Get the results.
-        compile_results = [result.get() for result in compile_results]
+        compile_results = [(result[0], result[1].get()) for result in compile_results]
 
         # TODO the compile tasks below may also benefit from parallelization too
 
@@ -596,7 +599,7 @@ class App(Base):
             compile_results.append(compiler.compile_tailwind(config.tailwind))
 
         # Empty the .web pages directory
-        compiler.purge_web_pages_dir()
+        compiler.purge_web_pages_dir(keep_paths=keep_paths)
 
         # Write the pages at the end to trigger the NextJS hot reload only once.
         thread_pool = ThreadPool()

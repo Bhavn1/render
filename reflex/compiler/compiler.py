@@ -1,13 +1,13 @@
 """Compiler for the reflex apps."""
 from __future__ import annotations
 
-from typing import Dict, List, Set, Tuple, Type
+from typing import Dict, List, Optional, Set, Tuple, Type
 
 from reflex import constants
 from reflex.compiler import templates, utils
 from reflex.components.component import Component, ComponentStyle, CustomComponent
 from reflex.state import State
-from reflex.utils import imports
+from reflex.utils import console, imports
 from reflex.vars import ImportVar
 
 # Imports to be included in every Reflex app.
@@ -87,7 +87,7 @@ def _compile_contexts(state: Type[State]) -> str:
     )
 
 
-def _compile_page(
+def compile_page(
     component: Component,
     custom_codes: set[str],
     state: Type[State],
@@ -219,33 +219,6 @@ def compile_contexts(
     return output_path, _compile_contexts(state)
 
 
-def compile_page(
-    path: str,
-    component: Component,
-    custom_codes: set[str],
-    state: Type[State],
-    component_render: Dict,
-) -> Tuple[str, str]:
-    """Compile a single page.
-
-    Args:
-        path: The path to compile the page to.
-        component: The component to compile.
-        custom_codes: The custom code of the component and its children.
-        state: The app state.
-        component_render: The Dict representation of the rendered component.
-
-    Returns:
-        The path and code of the compiled page.
-    """
-    # Get the path for the output file.
-    output_path = utils.get_page_path(path)
-
-    # Add the style to the component.
-    code = _compile_page(component, custom_codes, state, component_render)
-    return output_path, code
-
-
 def compile_components(components: Set[CustomComponent]):
     """Compile the custom components.
 
@@ -282,7 +255,14 @@ def compile_tailwind(
     return output_path, code
 
 
-def purge_web_pages_dir():
-    """Empty out .web directory."""
-    template_files = ["_app.js", "404.js"]
-    utils.empty_dir(constants.WEB_PAGES_DIR, keep_files=template_files)
+def purge_web_pages_dir(keep_paths: Optional[Set[str]] = None):
+    """Empty out .web directory.
+
+    Args:
+        keep_paths: The file paths to keep, relative to `WEB_PAGES_DIR` directory.
+    """
+    template_files = {"_app.js", "404.js"}
+    console.debug(
+        f"Purge directory `{constants.WEB_PAGES_DIR}`, keeping templates {template_files},\n keeping paths\n{keep_paths}\n"
+    )
+    utils.empty_dir(constants.WEB_PAGES_DIR, template_files, keep_paths or set())

@@ -24,7 +24,7 @@ from reflex.components.base import (
 from reflex.components.component import Component, ComponentStyle, CustomComponent
 from reflex.state import Cookie, LocalStorage, State
 from reflex.style import Style
-from reflex.utils import format, imports, path_ops
+from reflex.utils import console, format, imports, path_ops
 from reflex.vars import ImportVar
 
 # To re-export this function.
@@ -385,20 +385,34 @@ def write_page(path: str, code: str):
         f.write(code)
 
 
-def empty_dir(path: str, keep_files: Optional[List[str]] = None):
-    """Remove all files and folders in a directory except for the keep_files.
+def empty_dir(path: str, template_files: Set[str], keep_paths: Set[str]):
+    """Remove all files and folders in a directory except for the templates and the specified file paths.
 
     Args:
-        path: The path to the directory that will be emptied
-        keep_files: List of filenames or foldernames that will not be deleted.
+        path: The path to the directory that will be checked and emptied if applicable.
+        template_files: List of filenames that will not be deleted.
+        keep_paths: List of paths relatively to `path` that will not be deleted.
     """
     # If the directory does not exist, return.
     if not os.path.exists(path):
+        console.debug(f"{path} does not exist, returning")
         return
-
+    console.debug(f"Now checking {path} ...")
     # Remove all files and folders in the directory.
-    keep_files = keep_files or []
+    template_files = template_files or set()
+    keep_paths = keep_paths or set()
     directory_contents = os.listdir(path)
     for element in directory_contents:
-        if element not in keep_files:
-            path_ops.rm(os.path.join(path, element))
+        element_path = os.path.join(path, element)
+        console.debug(f"Checking {element_path}")
+        if os.path.isdir(element_path):
+            empty_dir(element_path, template_files, keep_paths)
+        elif element in template_files:
+            continue
+        elif element_path not in keep_paths:
+            console.debug(f"Removing file {element_path}")
+            path_ops.rm(element_path)
+    # Check again if the path is empty
+    if not os.listdir(path):
+        console.debug(f"Removing the now empty directory: {path}")
+        path_ops.rm(path)
