@@ -196,8 +196,8 @@ DEFAULT_META_LIST = []
 GITIGNORE_FILE = ".gitignore"
 # Files to gitignore.
 DEFAULT_GITIGNORE = {WEB_DIR, "*.db", "__pycache__/", "*.py[cod]"}
-# File that contains the component hashes for compilation caching.
-COMPILE_HASH_FILE = ".compile_hash.json"
+# File that contains the page hashes for compilation optimization.
+PAGE_HASHES_FILE = ".page_hashes.json"
 # The name of the reflex config module.
 CONFIG_MODULE = "rxconfig"
 # The python config file.

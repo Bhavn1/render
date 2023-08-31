@@ -1,7 +1,6 @@
 """Compiler for the reflex apps."""
 from __future__ import annotations
 
-import time
 from typing import Dict, List, Set, Tuple, Type
 
 from reflex import constants
@@ -90,6 +89,7 @@ def _compile_contexts(state: Type[State]) -> str:
 
 def _compile_page(
     component: Component,
+    custom_codes: set[str],
     state: Type[State],
     component_render: Dict,
 ) -> str:
@@ -97,6 +97,7 @@ def _compile_page(
 
     Args:
         component: The component to compile.
+        custom_codes: The custom code of the component and its children.
         state: The app state.
         component_render: The Dict representation of the rendered component.
 
@@ -108,30 +109,14 @@ def _compile_page(
     utils.validate_imports(imports)
     imports = utils.compile_imports(imports)
 
-    # custom_code = component.get_custom_code()
-    # if custom_code:
-    #     print(f"\n{custom_code=}\n")
-    #     print(f"\n{component_render=}")
-
     # Compile the code to render the component.
-    time.time()
-    res = templates.PAGE.render(
+    return templates.PAGE.render(
         imports=imports,
-        # for generic components, this is empty
-        # there is a special NoSSRComponent (no server side rendering)
-        # if user ever adds a NoSSR themselves, the logic would be different
-        # maybe should include it for the hash
-        custom_codes=component.get_custom_code(),
+        custom_codes=custom_codes,
         state_name=state.get_name(),
-        # hooks are mapped from refs, which are added to props in component.render()
-        # some components such as pininput, rangeslider special handling about arrays
-        # upload also adds some handler about file states
         hooks=component.get_hooks(),
         render=component_render,
     )
-    time.time()
-    # print(f"render time: {(et-st)*1000} milliseconds")
-    return res
 
 
 def _compile_components(components: Set[CustomComponent]) -> str:
@@ -237,6 +222,7 @@ def compile_contexts(
 def compile_page(
     path: str,
     component: Component,
+    custom_codes: set[str],
     state: Type[State],
     component_render: Dict,
 ) -> Tuple[str, str]:
@@ -245,6 +231,7 @@ def compile_page(
     Args:
         path: The path to compile the page to.
         component: The component to compile.
+        custom_codes: The custom code of the component and its children.
         state: The app state.
         component_render: The Dict representation of the rendered component.
 
@@ -255,7 +242,7 @@ def compile_page(
     output_path = utils.get_page_path(path)
 
     # Add the style to the component.
-    code = _compile_page(component, state, component_render)
+    code = _compile_page(component, custom_codes, state, component_render)
     return output_path, code
 
 

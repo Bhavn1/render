@@ -89,6 +89,10 @@ def init(
     # Initialize the .gitignore.
     prerequisites.initialize_gitignore()
 
+    # Clear the file containing page hashes
+    if os.path.exists(constants.PAGE_HASHES_FILE):
+        os.remove(constants.PAGE_HASHES_FILE)
+
     # Finish initializing the app.
     console.success(f"Initialized {app_name}")
 

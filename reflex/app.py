@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import inspect
 import json
 import os
@@ -511,66 +512,45 @@ class App(Base):
         # TODO Anecdotally, processes=2 works 10% faster (cpu_count=12)
         thread_pool = ThreadPool()
 
-        # Load the component hashes from file if file exists
-        page_hash = dict()
+        # Load the page hashes from file if exists.
+        page_hashes = dict()
         skipped_count = 0
-        if os.path.exists(constants.COMPILE_HASH_FILE):
+        if os.path.exists(constants.PAGE_HASHES_FILE):
             try:
-                with open(constants.COMPILE_HASH_FILE, "r") as f:
-                    page_hash = json.loads(f.read())
+                with open(constants.PAGE_HASHES_FILE, "r") as f:
+                    page_hashes = json.loads(f.read())
             except Exception as ex:
                 console.debug(
-                    f"Due to {ex}, cannot read {constants.COMPILE_HASH_FILE} file"
+                    f"Due to {ex}, cannot read {constants.PAGE_HASHES_FILE} file"
                 )
+                # Proceed to effectively re-render all pages.
         with progress:
             for route, component in self.pages.items():
                 # TODO: this progress does not reflect actual threaded task completion
                 progress.advance(task)
                 component.add_style(self.style)
 
-                # Render the component now so the tag is updated.
+                # Render the component to get the Dict representation now.
                 component_render = component.render()
+                custom_codes = component.get_custom_code()
 
-                def _convert_render_fns(comp):
-                    if comp is None:
-                        return None
-                    elif isinstance(comp, dict):
-                        return {
-                            k: _convert_render_fns(v)
-                            for k, v in comp.items()
-                            if k != "render_fn"
-                        }
-                    elif isinstance(comp, list):
-                        return [_convert_render_fns(v) for v in comp]
-                    else:
-                        return comp
-
-                # if component.tag is not None:
-                #    st = time.time()
-                # new_render = _convert_render_fns(component_render)
-                # new_checksum = hashlib.md5(
-                #     str(component_render).encode()
-                # ).hexdigest()
-                # et = time.time()
-                # print(f"\n{component_render=}\n\n{new_render=}\n\n")
-                # print(f"hashlib.md5 took {(et-st)*1000} milliseconds")
-                # if page_hash.get(route) == new_checksum:
-                #     skipped_count += 1
-                # continue
-                # else:
-                # if print_fail:
-                # print(f"\n{route=}\n")
-                # print(f"\n{component_render=}\n")
-                # print_fail = False
-                # page_hash[route] = new_checksum
+                if component_render or custom_codes:
+                    new_checksum = hashlib.md5(
+                        (str(component_render) + str(custom_codes)).encode()
+                    ).hexdigest()
+                    if page_hashes.get(route) == new_checksum:
+                        skipped_count += 1
+                        continue
+                    page_hashes[route] = new_checksum
                 compile_results.append(
                     thread_pool.apply_async(
                         compiler.compile_page,
                         args=(
                             route,
                             component,
+                            custom_codes,
                             self.state,
-                            component_render,  # try with new_render
+                            component_render,
                         ),
                     )
                 )
@@ -579,17 +559,16 @@ class App(Base):
         thread_pool.close()
         thread_pool.join()
 
-        # console.debug(
-        print(
+        console.debug(
             f"Skipped re-rendering {skipped_count} pages out of total {len(self.pages)}"
         )
-        if page_hash:
+        if page_hashes:
             try:
-                with open(constants.COMPILE_HASH_FILE, "w") as f:
-                    json.dump(page_hash, f)
+                with open(constants.PAGE_HASHES_FILE, "w") as f:
+                    json.dump(page_hashes, f)
             except Exception as ex:
                 console.debug(
-                    f"Due to {ex}, cannot write {constants.COMPILE_HASH_FILE} file"
+                    f"Due to {ex}, cannot write {constants.PAGE_HASHES_FILE} file"
                 )
 
         # Get the results.
