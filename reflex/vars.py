@@ -187,6 +187,14 @@ class Var(ABC):
             out = format.format_string(out)
         return out
 
+    def __repr__(self) -> str:
+        """Get the string representation of the var.
+
+        Returns:
+            The string representation of the var.
+        """
+        return self.__str__()
+
     def __format__(self, format_spec: str) -> str:
         """Format the var into a Javascript equivalent to an f-string.
 
@@ -765,7 +773,7 @@ class Var(ABC):
             A var representing foreach operation.
         """
         arg = BaseVar(
-            name=get_unique_variable_name(),
+            name="_elem",
             type_=self.type_,
         )
         return BaseVar(

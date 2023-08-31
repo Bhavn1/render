@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 import os
 from multiprocessing.pool import ThreadPool
 from typing import (
@@ -509,11 +510,59 @@ class App(Base):
         custom_components = set()
         # TODO Anecdotally, processes=2 works 10% faster (cpu_count=12)
         thread_pool = ThreadPool()
+
+        # Load the component hashes from file if file exists
+        page_hash = dict()
+        skipped_count = 0
+        if os.path.exists(constants.COMPILE_HASH_FILE):
+            try:
+                with open(constants.COMPILE_HASH_FILE, "r") as f:
+                    page_hash = json.loads(f.read())
+            except Exception as ex:
+                console.debug(
+                    f"Due to {ex}, cannot read {constants.COMPILE_HASH_FILE} file"
+                )
         with progress:
             for route, component in self.pages.items():
                 # TODO: this progress does not reflect actual threaded task completion
                 progress.advance(task)
                 component.add_style(self.style)
+
+                # Render the component now so the tag is updated.
+                component_render = component.render()
+
+                def _convert_render_fns(comp):
+                    if comp is None:
+                        return None
+                    elif isinstance(comp, dict):
+                        return {
+                            k: _convert_render_fns(v)
+                            for k, v in comp.items()
+                            if k != "render_fn"
+                        }
+                    elif isinstance(comp, list):
+                        return [_convert_render_fns(v) for v in comp]
+                    else:
+                        return comp
+
+                # if component.tag is not None:
+                #    st = time.time()
+                # new_render = _convert_render_fns(component_render)
+                # new_checksum = hashlib.md5(
+                #     str(component_render).encode()
+                # ).hexdigest()
+                # et = time.time()
+                # print(f"\n{component_render=}\n\n{new_render=}\n\n")
+                # print(f"hashlib.md5 took {(et-st)*1000} milliseconds")
+                # if page_hash.get(route) == new_checksum:
+                #     skipped_count += 1
+                # continue
+                # else:
+                # if print_fail:
+                # print(f"\n{route=}\n")
+                # print(f"\n{component_render=}\n")
+                # print_fail = False
+                # page_hash[route] = new_checksum
                 compile_results.append(
                     thread_pool.apply_async(
                         compiler.compile_page,
@@ -521,6 +570,7 @@ class App(Base):
                             route,
                             component,
                             self.state,
+                            component_render,  # try with new_render
                         ),
                     )
                 )
@@ -528,6 +578,19 @@ class App(Base):
                 custom_components |= component.get_custom_components()
         thread_pool.close()
         thread_pool.join()
+
+        # console.debug(
+        print(
+            f"Skipped re-rendering {skipped_count} pages out of total {len(self.pages)}"
+        )
+        if page_hash:
+            try:
+                with open(constants.COMPILE_HASH_FILE, "w") as f:
+                    json.dump(page_hash, f)
+            except Exception as ex:
+                console.debug(
+                    f"Due to {ex}, cannot write {constants.COMPILE_HASH_FILE} file"
+                )
 
         # Get the results.
         compile_results = [result.get() for result in compile_results]

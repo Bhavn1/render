@@ -6,7 +6,7 @@ from typing import Any, Callable, Iterable
 from reflex.components.component import Component
 from reflex.components.layout.fragment import Fragment
 from reflex.components.tags import IterTag
-from reflex.vars import BaseVar, Var, get_unique_variable_name
+from reflex.vars import BaseVar, Var
 
 
 class Foreach(Component):
@@ -57,7 +57,7 @@ class Foreach(Component):
     def _render(self) -> IterTag:
         return IterTag(iterable=self.iterable, render_fn=self.render_fn)
 
-    def render(self):
+    def render(self) -> dict:
         """Render the component.
 
         Returns:
@@ -73,12 +73,12 @@ class Foreach(Component):
         except Exception:
             type_ = Any
         arg = BaseVar(
-            name=get_unique_variable_name(),
+            name="_elem",
             type_=type_,
         )
         index_arg = tag.get_index_var_arg()
         component = tag.render_component(self.render_fn, arg)
-        return dict(
+        res = dict(
             tag.add_props(
                 **self.event_triggers,
                 key=self.key,
@@ -94,3 +94,6 @@ class Foreach(Component):
             arg_index=index_arg,
             iterable_type=tag.iterable.type_.mro()[0].__name__,
         )
+        # the dict representation already has render_fn taken effect on child components
+        del res["render_fn"]
+        return res
