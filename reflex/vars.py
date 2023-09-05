@@ -56,19 +56,19 @@ class Var(ABC):
     """An abstract var."""
 
     # The name of the var.
-    name: str
+    _name: str
 
     # The type of the var.
-    type_: Type
+    _type: Type
 
     # The name of the enclosing state.
-    state: str = ""
+    _state: str = ""
 
-    # Whether this is a local javascript variable.
-    is_local: bool = False
+    # Whether this is a local javascript variable (if True, wrap in curly brackets).
+    _is_local: bool = False
 
     # Whether the var is a string literal.
-    is_string: bool = False
+    _is_string: bool = False
 
     @classmethod
     def create(
@@ -112,7 +112,7 @@ class Var(ABC):
                 f"To create a Var must be Var or JSON-serializable. Got {value} of type {type(value)}."
             ) from e
 
-        return BaseVar(name=name, type_=type_, is_local=is_local, is_string=is_string)
+        return BaseVar(_name=name, _type=type_, _is_local=is_local, _is_string=is_string)
 
     @classmethod
     def create_safe(
@@ -153,14 +153,14 @@ class Var(ABC):
         Returns:
             The decoded value or the Var name.
         """
-        if self.state:
-            return self.full_name
-        if self.is_string or self.type_ is Figure:
-            return self.name
+        if self._state:
+            return self._full_name
+        if self._is_string or self._type is Figure:
+            return self._name
         try:
-            return json.loads(self.name)
+            return json.loads(self._name)
         except ValueError:
-            return self.name
+            return self._name
 
     def equals(self, other: Var) -> bool:
         """Check if two vars are equal.
@@ -172,10 +172,10 @@ class Var(ABC):
             Whether the vars are equal.
         """
         return (
-            self.name == other.name
-            and self.type_ == other.type_
-            and self.state == other.state
-            and self.is_local == other.is_local
+            self._name == other._name
+            and self._type == other._type
+            and self._state == other._state
+            and self._is_local == other._is_local
         )
 
     def to_string(self) -> Var:
@@ -192,7 +192,7 @@ class Var(ABC):
         Returns:
             The hash of the var.
         """
-        return hash((self.name, str(self.type_)))
+        return hash((self._name, str(self._type)))
 
     def __str__(self) -> str:
         """Wrap the var so it can be used in templates.
@@ -200,8 +200,8 @@ class Var(ABC):
         Returns:
             The wrapped var, i.e. {state.var}.
         """
-        out = self.full_name if self.is_local else format.wrap(self.full_name, "{")
-        if self.is_string:
+        out = self._full_name if self._is_local else format.wrap(self._full_name, "{")
+        if self._is_string:
             out = format.format_string(out)
         return out
 
@@ -214,7 +214,7 @@ class Var(ABC):
         Returns:
             The formatted var.
         """
-        if self.is_local:
+        if self._is_local:
             return str(self)
         return f"${str(self)}"
 
@@ -232,16 +232,16 @@ class Var(ABC):
         """
         # Indexing is only supported for strings, lists, tuples, dicts, and dataframes.
         if not (
-            types._issubclass(self.type_, Union[List, Dict, Tuple, str])
-            or types.is_dataframe(self.type_)
+            types._issubclass(self._type, Union[List, Dict, Tuple, str])
+            or types.is_dataframe(self._type)
         ):
-            if self.type_ == Any:
+            if self._type == Any:
                 raise TypeError(
                     "Could not index into var of type Any. (If you are trying to index into a state var, "
                     "add the correct type annotation to the var.)"
                 )
             raise TypeError(
-                f"Var {self.name} of type {self.type_} does not support indexing."
+                f"Var {self._name} of type {self._type} does not support indexing."
             )
 
         # The type of the indexed var.
@@ -249,10 +249,10 @@ class Var(ABC):
 
         # Convert any vars to local vars.
         if isinstance(i, Var):
-            i = BaseVar(name=i.name, type_=i.type_, state=i.state, is_local=True)
+            i = BaseVar(name=i._name, type_=i._type, state=i._state, is_local=True)
 
         # Handle list/tuple/str indexing.
-        if types._issubclass(self.type_, Union[List, Tuple, str]):
+        if types._issubclass(self._type, Union[List, Tuple, str]):
             # List/Tuple/String indices must be ints, slices, or vars.
             if (
                 not isinstance(i, types.get_args(Union[int, slice, Var]))
@@ -269,31 +269,31 @@ class Var(ABC):
 
                 # Use the slice function.
                 return BaseVar(
-                    name=f"{self.name}.slice({start}, {stop})",
-                    type_=self.type_,
-                    state=self.state,
-                    is_local=self.is_local,
+                    name=f"{self._name}.slice({start}, {stop})",
+                    type_=self._type,
+                    state=self._state,
+                    is_local=self._is_local,
                 )
 
             # Get the type of the indexed var.
             type_ = (
-                types.get_args(self.type_)[0]
-                if types.is_generic_alias(self.type_)
+                types.get_args(self._type)[0]
+                if types.is_generic_alias(self._type)
                 else Any
             )
 
             # Use `at` to support negative indices.
             return BaseVar(
-                name=f"{self.name}.at({i})",
+                name=f"{self._name}.at({i})",
                 type_=type_,
-                state=self.state,
-                is_local=self.is_local,
+                state=self._state,
+                is_local=self._is_local,
             )
 
         # Dictionary / dataframe indexing.
         # Tuples are currently not supported as indexes.
         if (
-            (types._issubclass(self.type_, Dict) or types.is_dataframe(self.type_))
+            (types._issubclass(self._type, Dict) or types.is_dataframe(self._type))
             and not isinstance(i, types.get_args(Union[int, str, float, Var]))
         ) or (
             isinstance(i, Var)
@@ -306,15 +306,15 @@ class Var(ABC):
         if isinstance(i, str):
             i = format.wrap(i, '"')
         type_ = (
-            types.get_args(self.type_)[1] if types.is_generic_alias(self.type_) else Any
+            types.get_args(self._type)[1] if types.is_generic_alias(self._type) else Any
         )
 
         # Use normal indexing here.
         return BaseVar(
-            name=f"{self.name}[{i}]",
+            name=f"{self._name}[{i}]",
             type_=type_,
-            state=self.state,
-            is_local=self.is_local,
+            state=self._state,
+            is_local=self._is_local,
         )
 
     def __getattribute__(self, name: str) -> Var:
@@ -335,22 +335,22 @@ class Var(ABC):
         except Exception as e:
             # Check if the attribute is one of the class fields.
             if not name.startswith("_"):
-                if self.type_ == Any:
+                if self._type == Any:
                     raise TypeError(
-                        f"You must provide an annotation for the state var `{self.full_name}`. Annotation cannot be `{self.type_}`"
+                        f"You must provide an annotation for the state var `{self._full_name}`. Annotation cannot be `{self._type}`"
                     ) from None
-                if hasattr(self.type_, "__fields__") and name in self.type_.__fields__:
-                    type_ = self.type_.__fields__[name].outer_type_
+                if hasattr(self._type, "__fields__") and name in self._type.__fields__:
+                    type_ = self._type.__fields__[name].outer_type_
                     if isinstance(type_, ModelField):
                         type_ = type_.type_
                     return BaseVar(
-                        name=f"{self.name}.{name}",
+                        name=f"{self._name}.{name}",
                         type_=type_,
-                        state=self.state,
-                        is_local=self.is_local,
+                        state=self._state,
+                        is_local=self._is_local,
                     )
             raise AttributeError(
-                f"The State var `{self.full_name}` has no attribute '{name}' or may have been annotated "
+                f"The State var `{self._full_name}` has no attribute '{name}' or may have been annotated "
                 f"wrongly.\n"
                 f"original message: {e.args[0]}"
             ) from e
@@ -381,12 +381,12 @@ class Var(ABC):
         else:
             other = Var.create(other)
         if type_ is None:
-            type_ = self.type_
+            type_ = self._type
         if other is None:
-            name = f"{op}{self.full_name}"
+            name = f"{op}{self._full_name}"
         else:
             props = (other, self) if flip else (self, other)
-            name = f"{props[0].full_name} {op} {props[1].full_name}"
+            name = f"{props[0]._full_name} {op} {props[1]._full_name}"
             if fn is None:
                 name = format.wrap(name, "(")
         if fn is not None:
@@ -394,7 +394,7 @@ class Var(ABC):
         return BaseVar(
             name=name,
             type_=type_,
-            is_local=self.is_local,
+            is_local=self._is_local,
         )
 
     def compare(self, op: str, other: Var) -> Var:
@@ -442,12 +442,12 @@ class Var(ABC):
         Raises:
             TypeError: If the var is not a list.
         """
-        if not types._issubclass(self.type_, List):
+        if not types._issubclass(self._type, List):
             raise TypeError(f"Cannot get length of non-list var {self}.")
         return BaseVar(
-            name=f"{self.full_name}.length",
+            name=f"{self._full_name}.length",
             type_=int,
-            is_local=self.is_local,
+            is_local=self._is_local,
         )
 
     def __eq__(self, other: Var) -> Var:
@@ -725,34 +725,34 @@ class Var(ABC):
         Returns:
             A var representing the contain check.
         """
-        if self.type_ is None or not (
-            types._issubclass(self.type_, Union[dict, list, tuple, str])
+        if self._type is None or not (
+            types._issubclass(self._type, Union[dict, list, tuple, str])
         ):
             raise TypeError(
-                f"Var {self.full_name} of type {self.type_} does not support contains check."
+                f"Var {self._full_name} of type {self._type} does not support contains check."
             )
         if isinstance(other, str):
             other = Var.create(json.dumps(other), is_string=True)
         elif not isinstance(other, Var):
             other = Var.create(other)
-        if types._issubclass(self.type_, Dict):
+        if types._issubclass(self._type, Dict):
             return BaseVar(
-                name=f"{self.full_name}.has({other.full_name})",
+                name=f"{self._full_name}.has({other._full_name})",
                 type_=bool,
-                is_local=self.is_local,
+                is_local=self._is_local,
             )
         else:  # str, list, tuple
             # For strings, the left operand must be a string.
-            if types._issubclass(self.type_, str) and not types._issubclass(
+            if types._issubclass(self._type, str) and not types._issubclass(
                 other.type_, str
             ):
                 raise TypeError(
                     f"'in <string>' requires string as left operand, not {other.type_}"
                 )
             return BaseVar(
-                name=f"{self.full_name}.includes({other.full_name})",
+                name=f"{self._full_name}.includes({other._full_name})",
                 type_=bool,
-                is_local=self.is_local,
+                is_local=self._is_local,
             )
 
     def reverse(self) -> Var:
@@ -764,13 +764,13 @@ class Var(ABC):
         Returns:
             A var with the reversed list.
         """
-        if self.type_ is None or not types._issubclass(self.type_, list):
-            raise TypeError(f"Cannot reverse non-list var {self.full_name}.")
+        if self._type is None or not types._issubclass(self._type, list):
+            raise TypeError(f"Cannot reverse non-list var {self._full_name}.")
 
         return BaseVar(
-            name=f"[...{self.full_name}].reverse()",
-            type_=self.type_,
-            is_local=self.is_local,
+            name=f"[...{self._full_name}].reverse()",
+            type_=self._type,
+            is_local=self._is_local,
         )
 
     def foreach(self, fn: Callable) -> Var:
@@ -784,12 +784,12 @@ class Var(ABC):
         """
         arg = BaseVar(
             name=get_unique_variable_name(),
-            type_=self.type_,
+            type_=self._type,
         )
         return BaseVar(
-            name=f"{self.full_name}.map(({arg.name}, i) => {fn(arg, key='i')})",
-            type_=self.type_,
-            is_local=self.is_local,
+            name=f"{self._full_name}.map(({arg._name}, i) => {fn(arg, key='i')})",
+            type_=self._type,
+            is_local=self._is_local,
         )
 
     def to(self, type_: Type) -> Var:
@@ -802,20 +802,20 @@ class Var(ABC):
             The converted var.
         """
         return BaseVar(
-            name=self.name,
+            name=self._name,
             type_=type_,
-            state=self.state,
-            is_local=self.is_local,
+            state=self._state,
+            is_local=self._is_local,
         )
 
     @property
-    def full_name(self) -> str:
+    def _full_name(self) -> str:
         """Get the full name of the var.
 
         Returns:
             The full name of the var.
         """
-        return self.name if self.state == "" else ".".join([self.state, self.name])
+        return self._name if self._state == "" else ".".join([self._state, self._name])
 
     def set_state(self, state: Type[State]) -> Any:
         """Set the state of the var.
@@ -826,7 +826,7 @@ class Var(ABC):
         Returns:
             The var with the set state.
         """
-        self.state = state.get_full_name()
+        self._state = state.get_full_name()
         return self
 
 
@@ -834,19 +834,19 @@ class BaseVar(Var, Base):
     """A base (non-computed) var of the app state."""
 
     # The name of the var.
-    name: str
+    _name: str
 
     # The type of the var.
-    type_: Any
+    _type: Any
 
     # The name of the enclosing state.
-    state: str = ""
+    _state: str = ""
 
     # Whether this is a local javascript variable.
-    is_local: bool = False
+    _is_local: bool = False
 
     # Whether this var is a raw string.
-    is_string: bool = False
+    _is_string: bool = False
 
     def __hash__(self) -> int:
         """Define a hash function for a var.
@@ -854,9 +854,9 @@ class BaseVar(Var, Base):
         Returns:
             The hash of the var.
         """
-        return hash((self.name, str(self.type_)))
+        return hash((self._name, str(self._type)))
 
-    def get_default_value(self) -> Any:
+    def _get_default_value(self) -> Any:
         """Get the default value of the var.
 
         Returns:
@@ -866,7 +866,7 @@ class BaseVar(Var, Base):
             ImportError: If the var is a dataframe and pandas is not installed.
         """
         type_ = (
-            self.type_.__origin__ if types.is_generic_alias(self.type_) else self.type_
+            self._type.__origin__ if types.is_generic_alias(self._type) else self._type
         )
         if issubclass(type_, str):
             return ""
@@ -891,7 +891,7 @@ class BaseVar(Var, Base):
                 ) from e
         return set() if issubclass(type_, set) else None
 
-    def get_setter_name(self, include_state: bool = True) -> str:
+    def _get_setter_name(self, include_state: bool = True) -> str:
         """Get the name of the var's generated setter function.
 
         Args:
@@ -900,12 +900,12 @@ class BaseVar(Var, Base):
         Returns:
             The name of the setter function.
         """
-        setter = constants.SETTER_PREFIX + self.name
-        if not include_state or self.state == "":
+        setter = constants.SETTER_PREFIX + self._name
+        if not include_state or self._state == "":
             return setter
-        return ".".join((self.state, setter))
+        return ".".join((self._state, setter))
 
-    def get_setter(self) -> Callable[[State, Any], None]:
+    def _get_setter(self) -> Callable[[State, Any], None]:
         """Get the var's setter function.
 
         Returns:
@@ -919,16 +919,16 @@ class BaseVar(Var, Base):
                 state: The state within which we add the setter function.
                 value: The value to set.
             """
-            if self.type_ in [int, float]:
+            if self._type in [int, float]:
                 try:
-                    value = self.type_(value)
-                    setattr(state, self.name, value)
+                    value = self._type(value)
+                    setattr(state, self._name, value)
                 except ValueError:
                     console.warn(
-                        f"{self.name}: Failed conversion of {value} to '{self.type_.__name__}'. Value not set.",
+                        f"{self._name}: Failed conversion of {value} to '{self._type.__name__}'. Value not set.",
                     )
             else:
-                setattr(state, self.name, value)
+                setattr(state, self._name, value)
 
         setter.__qualname__ = self.get_setter_name()
 
@@ -939,10 +939,10 @@ class ComputedVar(Var, property):
     """A field with computed getters."""
 
     # Whether to track dependencies and cache computed values
-    cache: bool = False
+    _cache: bool = False
 
     @property
-    def name(self) -> str:
+    def _name(self) -> str:
         """Get the name of the var.
 
         Returns:
@@ -952,13 +952,13 @@ class ComputedVar(Var, property):
         return self.fget.__name__
 
     @property
-    def cache_attr(self) -> str:
+    def _cache_attr(self) -> str:
         """Get the attribute used to cache the value on the instance.
 
         Returns:
             An attribute name.
         """
-        return f"__cached_{self.name}"
+        return f"__cached_{self._name}"
 
     def __get__(self, instance, owner):
         """Get the ComputedVar value.
@@ -972,15 +972,15 @@ class ComputedVar(Var, property):
         Returns:
             The value of the var for the given instance.
         """
-        if instance is None or not self.cache:
+        if instance is None or not self._cache:
             return super().__get__(instance, owner)
 
         # handle caching
-        if not hasattr(instance, self.cache_attr):
-            setattr(instance, self.cache_attr, super().__get__(instance, owner))
-        return getattr(instance, self.cache_attr)
+        if not hasattr(instance, self._cache_attr):
+            setattr(instance, self._cache_attr, super().__get__(instance, owner))
+        return getattr(instance, self._cache_attr)
 
-    def deps(
+    def _deps(
         self,
         objclass: Type,
         obj: FunctionType | CodeType | None = None,
@@ -995,7 +995,7 @@ class ComputedVar(Var, property):
         Args:
             objclass: the class obj this ComputedVar is attached to.
             obj: the object to disassemble (defaults to the fget function).
-            self_name: if specified, look for this name in LOAD_FAST and LOAD_DEREF instructions.
+            self._name: if specified, look for this name in LOAD_FAST and LOAD_DEREF instructions.
 
         Returns:
             A set of variable names accessed by the given obj.
@@ -1038,7 +1038,7 @@ class ComputedVar(Var, property):
             elif self_is_top_of_stack and instruction.opname == "LOAD_METHOD":
                 # method call on self
                 d.update(
-                    self.deps(
+                    self._deps(
                         objclass=objclass,
                         obj=getattr(objclass, instruction.argval),
                     )
@@ -1049,26 +1049,26 @@ class ComputedVar(Var, property):
                 # recurse into nested functions / comprehensions, which can reference
                 # instance attributes from the outer scope
                 d.update(
-                    self.deps(
+                    self._deps(
                         objclass=objclass,
                         obj=instruction.argval,
-                        self_name=self_name,
+                        self_name=self._name,
                     )
                 )
             self_is_top_of_stack = False
         return d
 
-    def mark_dirty(self, instance) -> None:
+    def _mark_dirty(self, instance) -> None:
         """Mark this ComputedVar as dirty.
 
         Args:
             instance: the state instance that needs to recompute the value.
         """
         with contextlib.suppress(AttributeError):
-            delattr(instance, self.cache_attr)
+            delattr(instance, self._cache_attr)
 
     @property
-    def type_(self):
+    def _type(self):
         """Get the type of the var.
 
         Returns:
@@ -1093,7 +1093,7 @@ def cached_var(fget: Callable[[Any], Any]) -> ComputedVar:
         ComputedVar that is recomputed when dependencies change.
     """
     cvar = ComputedVar(fget=fget)
-    cvar.cache = True
+    cvar._cache = True
     return cvar
 
 

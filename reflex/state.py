@@ -63,25 +63,25 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
     event_handlers: ClassVar[Dict[str, EventHandler]] = {}
 
     # The parent state.
-    parent_state: Optional[State] = None
+    _parent_state: Optional[State] = None
 
     # The substates of the state.
-    substates: Dict[str, State] = {}
+    _substates: Dict[str, State] = {}
 
     # The set of dirty vars.
-    dirty_vars: Set[str] = set()
+    _dirty_vars: Set[str] = set()
 
     # The set of dirty substates.
-    dirty_substates: Set[str] = set()
+    _dirty_substates: Set[str] = set()
 
     # The routing path that triggered the state
-    router_data: Dict[str, Any] = {}
+    _router_data: Dict[str, Any] = {}
 
     # Mapping of var name to set of computed variables that depend on it
-    computed_var_dependencies: Dict[str, Set[str]] = {}
+    _computed_var_dependencies: Dict[str, Set[str]] = {}
 
     # Mapping of var name to set of substates that depend on it
-    substate_var_dependencies: Dict[str, Set[str]] = {}
+    _substate_var_dependencies: Dict[str, Set[str]] = {}
 
     # Per-instance copy of backend variable values
     _backend_vars: Dict[str, Any] = {}
@@ -94,16 +94,16 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
             parent_state: The parent state.
             **kwargs: The kwargs to pass to the Pydantic init method.
         """
-        kwargs["parent_state"] = parent_state
+        kwargs["_parent_state"] = parent_state
         super().__init__(*args, **kwargs)
 
         # initialize per-instance var dependency tracking
-        self.computed_var_dependencies = defaultdict(set)
-        self.substate_var_dependencies = defaultdict(set)
+        self._computed_var_dependencies = defaultdict(set)
+        self._substate_var_dependencies = defaultdict(set)
 
         # Setup the substates.
         for substate in self.get_substates():
-            self.substates[substate.get_name()] = substate(parent_state=self)
+            self._substates[substate.get_name()] = substate(parent_state=self)
         # Convert the event handlers to functions.
         self._init_event_handlers()
 
@@ -113,17 +113,17 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
         )
         for cvar_name, cvar in self.computed_vars.items():
             # Add the dependencies.
-            for var in cvar.deps(objclass=type(self)):
-                self.computed_var_dependencies[var].add(cvar_name)
+            for var in cvar._deps(objclass=type(self)):
+                self._computed_var_dependencies[var].add(cvar_name)
                 if var in inherited_vars:
                     # track that this substate depends on its parent for this var
                     state_name = self.get_name()
-                    parent_state = self.parent_state
+                    parent_state = self._parent_state
                     while parent_state is not None and var in parent_state.vars:
-                        parent_state.substate_var_dependencies[var].add(state_name)
+                        parent_state._substate_var_dependencies[var].add(state_name)
                         state_name, parent_state = (
                             parent_state.get_name(),
-                            parent_state.parent_state,
+                            parent_state._parent_state,
                         )
 
         # Create a fresh copy of the backend variables for this instance
@@ -138,9 +138,9 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
         Allow mutation to dict, list, and set to be detected by the app.
         """
         for field in self.base_vars.values():
-            value = getattr(self, field.name)
+            value = getattr(self, field._name)
 
-            if types._issubclass(field.type_, Union[List, Dict, Set]):
+            if types._issubclass(field._type, Union[List, Dict, Set]):
                 value_in_rx_data = _convert_mutable_datatypes(
                     value, self._reassign_field, field.name
                 )
@@ -175,8 +175,8 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
             setattr(self, name, fn)
 
         # Also allow direct calling of parent state event handlers
-        if state.parent_state is not None:
-            self._init_event_handlers(state.parent_state)
+        if state._parent_state is not None:
+            self._init_event_handlers(state._parent_state)
 
     def _reassign_field(self, field_name: str):
         """Reassign the given field.
@@ -229,12 +229,12 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
 
         # Set the base and computed vars.
         cls.base_vars = {
-            f.name: BaseVar(name=f.name, type_=f.outer_type_).set_state(cls)
+            f.name: BaseVar(name=f.name, type_=f.outer_type_)._set_state(cls)
             for f in cls.get_fields().values()
-            if f.name not in cls.get_skip_vars()
+            if f.name not in cls._get_skip_vars()
         }
         cls.computed_vars = {
-            v.name: v.set_state(cls)
+            v.name: v._set_state(cls)
             for v in cls.__dict__.values()
             if isinstance(v, ComputedVar)
         }
@@ -286,7 +286,7 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
             )
 
     @classmethod
-    def get_skip_vars(cls) -> set[str]:
+    def _get_skip_vars(cls) -> set[str]:
         """Get the vars to skip when serializing.
 
         Returns:
@@ -407,19 +407,19 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
         Raises:
             TypeError: if the variable has an incorrect type
         """
-        if not types.is_valid_var_type(prop.type_):
+        if not types.is_valid_var_type(prop._type):
             raise TypeError(
                 "State vars must be primitive Python types, "
                 "Plotly figures, Pandas dataframes, "
                 "or subclasses of rx.Base. "
-                f'Found var "{prop.name}" with type {prop.type_}.'
+                f'Found var "{prop._name}" with type {prop._type}.'
             )
         cls._set_var(prop)
         cls._create_setter(prop)
         cls._set_default_value(prop)
 
     @classmethod
-    def add_var(cls, name: str, type_: Any, default_value: Any = None):
+    def _add_var(cls, name: str, type_: Any, default_value: Any = None):
         """Add dynamically a variable to the State.
 
         The variable added this way can be used in the same way as a variable
@@ -440,7 +440,7 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
 
         # create the variable based on name and type
         var = BaseVar(name=name, type_=type_)
-        var.set_state(cls)
+        var._set_state(cls)
 
         # add the pydantic field dynamically (must be done before _init_var)
         cls.add_field(var, default_value)
@@ -462,7 +462,7 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
         Args:
             prop: The var instance to set.
         """
-        setattr(cls, prop.name, prop)
+        setattr(cls, prop._name, prop)
 
     @classmethod
     def _create_setter(cls, prop: BaseVar):
@@ -485,8 +485,8 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
             prop: The var to set the default value for.
         """
         # Get the pydantic field for the var.
-        field = cls.get_fields()[prop.name]
-        default_value = prop.get_default_value()
+        field = cls.get_fields()[prop._name]
+        default_value = prop._get_default_value()
         if field.required and default_value is not None:
             field.required = False
             field.default = default_value
@@ -510,7 +510,7 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
         Returns:
             The token of the client.
         """
-        return self.router_data.get(constants.RouteVar.CLIENT_TOKEN, "")
+        return self._router_data.get(constants.RouteVar.CLIENT_TOKEN, "")
 
     def get_sid(self) -> str:
         """Return the session ID of the client associated with this state.
@@ -518,7 +518,7 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
         Returns:
             The session ID of the client.
         """
-        return self.router_data.get(constants.RouteVar.SESSION_ID, "")
+        return self._router_data.get(constants.RouteVar.SESSION_ID, "")
 
     def get_headers(self) -> Dict:
         """Return the headers of the client associated with this state.
@@ -526,7 +526,7 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
         Returns:
             The headers of the client.
         """
-        return self.router_data.get(constants.RouteVar.HEADERS, {})
+        return self._router_data.get(constants.RouteVar.HEADERS, {})
 
     def get_client_ip(self) -> str:
         """Return the IP of the client associated with this state.
@@ -534,7 +534,7 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
         Returns:
             The IP of the client.
         """
-        return self.router_data.get(constants.RouteVar.CLIENT_IP, "")
+        return self._router_data.get(constants.RouteVar.CLIENT_IP, "")
 
     def get_current_page(self, origin=False) -> str:
         """Obtain the path of current page from the router data.
@@ -546,9 +546,9 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
             The current page.
         """
         if origin:
-            return self.router_data.get(constants.RouteVar.ORIGIN, "")
+            return self._router_data.get(constants.RouteVar.ORIGIN, "")
         else:
-            return self.router_data.get(constants.RouteVar.PATH, "")
+            return self._router_data.get(constants.RouteVar.PATH, "")
 
     def get_query_params(self) -> dict[str, str]:
         """Obtain the query parameters for the queried page.
@@ -558,7 +558,7 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
         Returns:
             The dict of query parameters.
         """
-        return self.router_data.get(constants.RouteVar.QUERY, {})
+        return self._router_data.get(constants.RouteVar.QUERY, {})
 
     def get_cookies(self) -> dict[str, str]:
         """Obtain the cookies of the client stored in the browser.
@@ -583,7 +583,7 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
         return cookie_dict
 
     @classmethod
-    def setup_dynamic_args(cls, args: dict[str, str]):
+    def _setup_dynamic_args(cls, args: dict[str, str]):
         """Set up args for easy access in renderer.
 
         Args:
@@ -612,7 +612,7 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
             else:
                 continue
             func.fget.__name__ = param  # to allow passing as a prop # type: ignore
-            cls.vars[param] = cls.computed_vars[param] = func.set_state(cls)  # type: ignore
+            cls.vars[param] = cls.computed_vars[param] = func._set_state(cls)  # type: ignore
             setattr(cls, param, func)
 
     def __getattribute__(self, name: str) -> Any:
@@ -652,7 +652,7 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
         # Set the var on the parent state.
         inherited_vars = {**self.inherited_vars, **self.inherited_backend_vars}
         if name in inherited_vars:
-            setattr(self.parent_state, name, value)
+            setattr(self._parent_state, name, value)
             return
 
         # Make sure lists and dicts are converted to ReflexList, ReflexDict and ReflexSet.
@@ -663,7 +663,7 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
 
         if types.is_backend_variable(name) and name != "_backend_vars":
             self._backend_vars.__setitem__(name, value)
-            self.dirty_vars.add(name)
+            self._dirty_vars.add(name)
             self._mark_dirty()
             return
 
@@ -671,16 +671,16 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
         super().__setattr__(name, value)
 
         # Add the var to the dirty list.
-        if name in self.vars or name in self.computed_var_dependencies:
-            self.dirty_vars.add(name)
+        if name in self.vars or name in self._computed_var_dependencies:
+            self._dirty_vars.add(name)
             self._mark_dirty()
 
         # For now, handle router_data updates as a special case
         if name == constants.ROUTER_DATA:
-            self.dirty_vars.add(name)
+            self._dirty_vars.add(name)
             self._mark_dirty()
             # propagate router_data updates down the state tree
-            for substate in self.substates.values():
+            for substate in self._substates.values():
                 setattr(substate, name, value)
 
     def reset(self):
@@ -691,7 +691,7 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
             setattr(self, prop_name, fields[prop_name].default)
 
         # Recursively reset the substates.
-        for substate in self.substates.values():
+        for substate in self._substates.values():
             substate.reset()
 
     def _reset_client_storage(self):
@@ -708,10 +708,10 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
                 setattr(self, prop_name, field.default)
 
         # Recursively reset the substate client storage.
-        for substate in self.substates.values():
+        for substate in self._substates.values():
             substate._reset_client_storage()
 
-    def get_substate(self, path: Sequence[str]) -> State | None:
+    def _get_substate(self, path: Sequence[str]) -> State | None:
         """Get the substate.
 
         Args:
@@ -729,9 +729,9 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
             if len(path) == 1:
                 return self
             path = path[1:]
-        if path[0] not in self.substates:
+        if path[0] not in self._substates:
             raise ValueError(f"Invalid path: {path}")
-        return self.substates[path[0]].get_substate(path[1:])
+        return self._substates[path[0]].get_substate(path[1:])
 
     async def _process(self, event: Event) -> AsyncIterator[StateUpdate]:
         """Obtain event info and process event.
@@ -878,11 +878,11 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
 
     def _mark_dirty_computed_vars(self) -> None:
         """Mark ComputedVars that need to be recalculated based on dirty_vars."""
-        dirty_vars = self.dirty_vars
+        dirty_vars = self._dirty_vars
         while dirty_vars:
             calc_vars, dirty_vars = dirty_vars, set()
             for cvar in self._dirty_computed_vars(from_vars=calc_vars):
-                self.dirty_vars.add(cvar)
+                self._dirty_vars.add(cvar)
                 dirty_vars.add(cvar)
                 actual_var = self.computed_vars.get(cvar)
                 if actual_var:
@@ -899,8 +899,8 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
         """
         return set(
             cvar
-            for dirty_var in from_vars or self.dirty_vars
-            for cvar in self.computed_var_dependencies[dirty_var]
+            for dirty_var in from_vars or self._dirty_vars
+            for cvar in self._computed_var_dependencies[dirty_var]
         )
 
     def get_delta(self) -> Delta:
@@ -912,13 +912,13 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
         delta = {}
 
         # Apply dirty variables down into substates
-        self.dirty_vars.update(self._always_dirty_computed_vars())
+        self._dirty_vars.update(self._always_dirty_computed_vars())
         self._mark_dirty()
 
         # Return the dirty vars for this instance, any cached/dependent computed vars,
         # and always dirty computed vars (cache=False)
         delta_vars = (
-            self.dirty_vars.intersection(self.base_vars)
+            self._dirty_vars.intersection(self.base_vars)
             .union(self._dirty_computed_vars())
             .union(self._always_dirty_computed_vars())
         )
@@ -932,8 +932,8 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
             delta[self.get_full_name()] = subdelta
 
         # Recursively find the substate deltas.
-        substates = self.substates
-        for substate in self.dirty_substates:
+        substates = self._substates
+        for substate in self._dirty_substates:
             delta.update(substates[substate].get_delta())
 
         # Format the delta.
@@ -946,34 +946,34 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
         """Mark the substate and all parent states as dirty."""
         state_name = self.get_name()
         if (
-            self.parent_state is not None
-            and state_name not in self.parent_state.dirty_substates
+            self._parent_state is not None
+            and state_name not in self._parent_state._dirty_substates
         ):
-            self.parent_state.dirty_substates.add(self.get_name())
-            self.parent_state._mark_dirty()
+            self._parent_state._dirty_substates.add(self.get_name())
+            self._parent_state._mark_dirty()
 
         # have to mark computed vars dirty to allow access to newly computed
         # values within the same ComputedVar function
         self._mark_dirty_computed_vars()
 
         # Propagate dirty var / computed var status into substates
-        substates = self.substates
-        for var in self.dirty_vars:
-            for substate_name in self.substate_var_dependencies[var]:
-                self.dirty_substates.add(substate_name)
+        substates = self._substates
+        for var in self._dirty_vars:
+            for substate_name in self._substate_var_dependencies[var]:
+                self._dirty_substates.add(substate_name)
                 substate = substates[substate_name]
-                substate.dirty_vars.add(var)
+                substate._dirty_vars.add(var)
                 substate._mark_dirty()
 
     def _clean(self):
         """Reset the dirty vars."""
         # Recursively clean the substates.
-        for substate in self.dirty_substates:
-            self.substates[substate]._clean()
+        for substate in self._dirty_substates:
+            self._substates[substate]._clean()
 
         # Clean this state.
-        self.dirty_vars = set()
-        self.dirty_substates = set()
+        self._dirty_vars = set()
+        self._dirty_substates = set()
 
     def dict(self, include_computed: bool = True, **kwargs) -> dict[str, Any]:
         """Convert the object to a dictionary.
@@ -988,7 +988,7 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
         if include_computed:
             # Apply dirty variables down into substates to allow never-cached ComputedVar to
             # trigger recalculation of dependent vars
-            self.dirty_vars.update(self._always_dirty_computed_vars())
+            self._dirty_vars.update(self._always_dirty_computed_vars())
             self._mark_dirty()
 
         base_vars = {
@@ -1006,7 +1006,7 @@ class State(Base, ABC, extra=pydantic.Extra.allow):
         )
         substate_vars = {
             k: v.dict(include_computed=include_computed, **kwargs)
-            for k, v in self.substates.items()
+            for k, v in self._substates.items()
         }
         variables = {**base_vars, **computed_vars, **substate_vars}
         return {k: variables[k] for k in sorted(variables)}
