@@ -168,6 +168,8 @@ STATE = "state"
 EVENTS = "events"
 # The name of the initial hydrate event.
 HYDRATE = "hydrate"
+# The name of the internal on_load event.
+ON_LOAD_INTERNAL = "on_load_internal"
 # The name of the is_hydrated variable.
 IS_HYDRATED = "is_hydrated"
 # The name of the index page.
@@ -325,6 +327,10 @@ class RouteVar(SimpleNamespace):
     SESSION_ID = "sid"
     QUERY = "query"
     COOKIE = "cookie"
+
+
+# This subset of router_data is included in chained on_load events.
+ROUTER_DATA_INCLUDE = set((RouteVar.PATH, RouteVar.ORIGIN, RouteVar.QUERY))
 
 
 class RouteRegex(SimpleNamespace):

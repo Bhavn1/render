@@ -29,14 +29,14 @@ def DynamicRoute():
             self.order.append(f"on_load_redir-{query_params}")
             return rx.redirect(f"/page/{query_params['page_id']}")
 
-        @rx.var
+        @rx.cached_var
         def next_page(self) -> str:
             try:
                 return str(int(self.page_id) + 1)
             except ValueError:
                 return "0"
 
-        @rx.var
+        @rx.cached_var
         def token(self) -> str:
             return self.get_token()
 

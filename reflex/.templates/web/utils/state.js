@@ -456,7 +456,12 @@ export const useEventLoop = (
   // initial state hydrate
   useEffect(() => {
     if (router.isReady && !sentHydrate.current) {
-      Event(initial_events.map((e) => ({...e})))
+      Event(initial_events.map((e) => (
+        {
+          ...e,
+          router_data: (({ pathname, query, asPath }) => ({ pathname, query, asPath }))(router)
+        }
+      )))
       sentHydrate.current = true
     }
   }, [router.isReady])

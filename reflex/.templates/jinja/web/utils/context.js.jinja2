@@ -7,4 +7,5 @@ export const EventLoopContext = createContext(null);
 export const clientStorage = {{ client_storage|json_dumps }}
 export const initialEvents = [
     E('{{state_name}}.{{const.hydrate}}', hydrateClientStorage(clientStorage)),
+    E('{{state_name}}.{{const.on_load_internal}}'),
 ]
