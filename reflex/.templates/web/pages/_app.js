@@ -1,8 +1,8 @@
 import { ChakraProvider, extendTheme } from "@chakra-ui/react";
 import { Global, css } from "@emotion/react";
-import { useReducer } from "react";
+import { useContext, useReducer } from "react";
 import theme from "/utils/theme";
-import { clientStorage, initialEvents, initialState, StateContext, EventLoopContext } from "/utils/context.js";
+import { clientStorage, initialEvents, initialState, DispatchContext, StateContext, EventLoopContext } from "/utils/context.js";
 import { applyDelta, useEventLoop } from "utils/state";
 
 import '../styles/tailwind.css'
@@ -15,7 +15,8 @@ const GlobalStyles = css`
   }
 `;
 
-function EventLoopProvider({ dispatch, children }) {
+function EventLoopProvider({ children }) {
+  const dispatch = useContext(DispatchContext)
   const [Event, connectError] = useEventLoop(
     dispatch,
     initialEvents,
@@ -33,9 +34,9 @@ function StateProvider({ children }) {
 
   return (
     <StateContext.Provider value={state}>
-      <EventLoopProvider dispatch={dispatch}>
+      <DispatchContext.Provider value={dispatch}>
         {children}
-      </EventLoopProvider>
+      </DispatchContext.Provider>
     </StateContext.Provider>
   )
 }
@@ -45,7 +46,9 @@ function MyApp({ Component, pageProps }) {
     <ChakraProvider theme={extendTheme(theme)}>
       <Global styles={GlobalStyles} />
       <StateProvider>
-        <Component {...pageProps} />
+        <EventLoopProvider>
+          <Component {...pageProps} />
+        </EventLoopProvider>
       </StateProvider>
     </ChakraProvider>
   );
