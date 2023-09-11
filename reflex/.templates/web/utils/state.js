@@ -427,23 +427,21 @@ const applyClientStorageDelta = (client_storage, delta) => {
 
 /**
  * Establish websocket event loop for a NextJS page.
- * @param initial_state The initial app state.
+ * @param dispatch The reducer dispatch function to update state.
  * @param initial_events The initial app events.
  * @param client_storage The client storage object from context.js
  *
- * @returns [state, Event, connectError] -
- *   state is a reactive dict,
+ * @returns [Event, connectError] -
  *   Event is used to queue an event, and
  *   connectError is a reactive js error from the websocket connection (or null if connected).
  */
 export const useEventLoop = (
-  initial_state = {},
+  dispatch,
   initial_events = [],
   client_storage = {},
 ) => {
   const socket = useRef(null)
   const router = useRouter()
-  const [state, dispatch] = useReducer(applyDelta, initial_state)
   const [connectError, setConnectError] = useState(null)
   
   // Function to add new events to the event queue.
@@ -479,7 +477,7 @@ export const useEventLoop = (
       }
     })()
   })
-  return [state, Event, connectError]
+  return [Event, connectError]
 }
 
 /***
