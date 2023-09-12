@@ -70,6 +70,9 @@ class Var(ABC):
     # Whether the var is a string literal.
     is_string: bool = False
 
+    # The qualified name of the var.
+    _full_name: str = ""
+
     @classmethod
     def create(
         cls, value: Any, is_local: bool = True, is_string: bool = False
@@ -415,6 +418,7 @@ class Var(ABC):
         return BaseVar(
             name=name,
             type_=type_,
+            state=self.state,
             is_local=self.is_local,
         )
 
@@ -468,6 +472,7 @@ class Var(ABC):
         return BaseVar(
             name=f"{self.full_name}.length",
             type_=int,
+            state=self.state,
             is_local=self.is_local,
         )
 
@@ -760,6 +765,7 @@ class Var(ABC):
             return BaseVar(
                 name=f"{self.full_name}.has({other.full_name})",
                 type_=bool,
+                state=self.state,
                 is_local=self.is_local,
             )
         else:  # str, list, tuple
@@ -773,6 +779,7 @@ class Var(ABC):
             return BaseVar(
                 name=f"{self.full_name}.includes({other.full_name})",
                 type_=bool,
+                state=self.state,
                 is_local=self.is_local,
             )
 
@@ -791,6 +798,7 @@ class Var(ABC):
         return BaseVar(
             name=f"[...{self.full_name}].reverse()",
             type_=self.type_,
+            state=self.state,
             is_local=self.is_local,
         )
 
@@ -810,6 +818,7 @@ class Var(ABC):
         return BaseVar(
             name=f"{self.full_name}.map(({arg.name}, i) => {fn(arg, key='i')})",
             type_=self.type_,
+            state=self.state,
             is_local=self.is_local,
         )
 
@@ -827,6 +836,7 @@ class Var(ABC):
             type_=type_,
             state=self.state,
             is_local=self.is_local,
+            _full_name=self._full_name,
         )
 
     @property
@@ -836,7 +846,7 @@ class Var(ABC):
         Returns:
             The full name of the var.
         """
-        return self.name if self.state == "" else ".".join([self.state, self.name])
+        return self._full_name if self._full_name else self.name
 
     def set_state(self, state: Type[State]) -> Any:
         """Set the state of the var.
@@ -848,6 +858,7 @@ class Var(ABC):
             The var with the set state.
         """
         self.state = state.get_full_name()
+        self._full_name = self.name if self.state == "" else ".".join([self.state, self.name])
         return self
 
 
