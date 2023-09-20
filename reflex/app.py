@@ -355,7 +355,10 @@ class App(Base):
             assert isinstance(
                 component, Callable
             ), "Route must be set if component is not a callable."
-            route = component.__name__
+            # Format the route.
+            route = format.format_route(component.__name__)
+        else:
+            route = format.format_route(route, format_case=False)
 
         # Check if the route given is valid
         verify_route_validity(route)
@@ -387,9 +390,6 @@ class App(Base):
         # Add script tags if given
         if script_tags:
             component.children.extend(script_tags)
-
-        # Format the route.
-        route = format.format_route(route)
 
         # Add the page.
         self._check_routes_conflict(route)
@@ -524,6 +524,7 @@ class App(Base):
             and i != "focus-visible/dist/focus-visible"
             and "next" not in i
             and not i.startswith("/")
+            and not i.startswith(".")
             and i != ""
         }
         frontend_packages = get_config().frontend_packages
@@ -611,8 +612,11 @@ class App(Base):
         for component in custom_components:
             all_imports.update(component.get_imports())
 
-        # Compile the root document with base styles and fonts
-        compile_results.append(compiler.compile_document_root(self.stylesheets))
+        # Compile the root stylesheet with base styles.
+        compile_results.append(compiler.compile_root_stylesheet(self.stylesheets))
+
+        # Compile the root document.
+        compile_results.append(compiler.compile_document_root())
 
         # Compile the theme.
         compile_results.append(compiler.compile_theme(self.style))

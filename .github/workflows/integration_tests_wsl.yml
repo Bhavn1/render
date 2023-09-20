@@ -13,6 +13,9 @@ on:
 permissions:
   contents: read
 
+env:
+  TELEMETRY_ENABLED: false
+
 jobs:
   example-counter-wsl:
     # 2019 is more stable with WSL in GH actions
@@ -20,9 +23,9 @@ jobs:
     # Confirmed through trial and error. 2022 has >80% failure rate (probably BSOD)
     runs-on: windows-2019
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Clone Reflex Examples Repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: reflex-dev/reflex-examples
           path: reflex-examples

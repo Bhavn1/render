@@ -7,7 +7,7 @@ import re
 import sys
 from inspect import getfullargspec
 from pathlib import Path
-from typing import Any, Dict, List, Optional, get_args
+from typing import Any, Dict, List, Optional, Union, get_args  # NOQA
 
 import black
 
@@ -96,8 +96,9 @@ class PyiGenerator:
         typing_imports = self.default_typing_imports | _get_typing_import(
             self.current_module
         )
+        bases = sorted(bases, key=lambda base: base.__name__)
         return [
-            f"from typing import {','.join(typing_imports)}",
+            f"from typing import {','.join(sorted(typing_imports))}",
             *[f"from {base.__module__} import {base.__name__}" for base in bases],
             "from reflex.vars import Var, BaseVar, ComputedVar",
             "from reflex.event import EventHandler, EventChain, EventSpec",
@@ -180,7 +181,14 @@ class PyiGenerator:
         return _get_var_definition(self.current_module, _name)
 
     def _generate_function(self, _name, _func):
-        definition = "".join(inspect.getsource(_func).split(":\n")[0].split("\n"))
+        import textwrap
+
+        # Don't generate indented functions.
+        source = inspect.getsource(_func)
+        if textwrap.dedent(source) != source:
+            return []
+
+        definition = "".join([line for line in source.split(":\n")[0].split("\n")])
         return [f"{definition}:", "    ..."]
 
     def _write_pyi_file(self, variables, functions, classes):

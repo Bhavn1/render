@@ -2,21 +2,16 @@
 
 from __future__ import annotations
 
-import base64
-import io
 import json
 import os
 import os.path as op
 import re
 import sys
-from typing import TYPE_CHECKING, Any, Type, Union
-
-import plotly.graph_objects as go
-from plotly.graph_objects import Figure
-from plotly.io import to_json
+from typing import TYPE_CHECKING, Any, Union
 
 from reflex import constants
-from reflex.utils import types
+from reflex.utils import exceptions, serializers, types
+from reflex.utils.serializers import serialize
 from reflex.vars import Var
 
 if TYPE_CHECKING:
@@ -164,6 +159,21 @@ def to_title_case(text: str) -> str:
     return "".join(word.capitalize() for word in text.split("_"))
 
 
+def to_kebab_case(text: str) -> str:
+    """Convert a string to kebab case.
+
+    The words in the text are converted to lowercase and
+    separated by hyphens.
+
+    Args:
+        text: The string to convert.
+
+    Returns:
+        The title case string.
+    """
+    return to_snake_case(text).replace("_", "-")
+
+
 def format_string(string: str) -> str:
     """Format the given string as a JS string literal..
 
@@ -202,18 +212,20 @@ def format_var(var: Var) -> str:
     return json_dumps(var.full_name)
 
 
-def format_route(route: str) -> str:
+def format_route(route: str, format_case=True) -> str:
     """Format the given route.
 
     Args:
         route: The route to format.
+        format_case: whether to format case to kebab case.
 
     Returns:
         The formatted route.
     """
-    # Strip the route.
     route = route.strip("/")
-    route = to_snake_case(route).replace("_", "-")
+    # Strip the route and format casing.
+    if format_case:
+        route = to_kebab_case(route)
 
     # If the route is empty, return the index route.
     if route == "":
@@ -271,7 +283,8 @@ def format_prop(
         The formatted prop to display within a tag.
 
     Raises:
-        TypeError: If the prop is not a valid type.
+        exceptions.InvalidStylePropError: If the style prop value is not a valid type.
+        TypeError: If the prop is not valid.
     """
     # import here to avoid circular import.
     from reflex.event import EVENT_ARG, EventChain
@@ -297,22 +310,39 @@ def format_prop(
                 return prop
             return json_dumps(prop)
 
-        elif isinstance(prop, Figure):
-            prop = json.loads(to_json(prop))["data"]  # type: ignore
-
         # For dictionaries, convert any properties to strings.
         elif isinstance(prop, dict):
-            prop = format_dict(prop)
+            prop = serializers.serialize_dict(prop)  # type: ignore
 
         else:
             # Dump the prop as JSON.
             prop = json_dumps(prop)
+    except exceptions.InvalidStylePropError:
+        raise
     except TypeError as e:
         raise TypeError(f"Could not format prop: {prop} of type {type(prop)}") from e
 
     # Wrap the variable in braces.
     assert isinstance(prop, str), "The prop must be a string."
     return wrap(prop, "{", check_first=False)
+
+
+def format_props(*single_props, **key_value_props) -> list[str]:
+    """Format the tag's props.
+
+    Args:
+        single_props: Props that are not key-value pairs.
+        key_value_props: Props that are key-value pairs.
+
+    Returns:
+        The formatted props list.
+    """
+    # Format all the props.
+    return [
+        f"{name}={format_prop(prop)}"
+        for name, prop in sorted(key_value_props.items())
+        if prop is not None
+    ] + [str(prop) for prop in sorted(single_props)]
 
 
 def get_event_handler_parts(handler: EventHandler) -> tuple[str, str]:
@@ -440,44 +470,6 @@ def format_query_params(router_data: dict[str, Any]) -> dict[str, str]:
     return {k.replace("-", "_"): v for k, v in params.items()}
 
 
-def format_dataframe_values(value: Type) -> list[Any]:
-    """Format dataframe values.
-
-    Args:
-        value: The value to format.
-
-    Returns:
-        Format data
-    """
-    if not types.is_dataframe(type(value)):
-        return value
-
-    format_data = []
-    for data in list(value.values.tolist()):
-        element = []
-        for d in data:
-            element.append(str(d) if isinstance(d, (list, tuple)) else d)
-        format_data.append(element)
-
-    return format_data
-
-
-def format_image_data(value: Type) -> str:
-    """Format image data.
-
-    Args:
-        value: The value to format.
-
-    Returns:
-        Format data
-    """
-    buff = io.BytesIO()
-    value.save(buff, format="PNG")
-    image_bytes = buff.getvalue()
-    base64_image = base64.b64encode(image_bytes).decode("utf-8")
-    return f"data:image/png;base64,{base64_image}"
-
-
 def format_state(value: Any) -> Any:
     """Recursively format values in the given state.
 
@@ -502,30 +494,12 @@ def format_state(value: Any) -> Any:
     if isinstance(value, types.StateBases):
         return value
 
-    # Convert plotly figures to JSON.
-    if isinstance(value, go.Figure):
-        return json.loads(to_json(value))["data"]  # type: ignore
+    # Serialize the value.
+    serialized = serialize(value)
+    if serialized is not None:
+        return serialized
 
-    # Convert pandas dataframes to JSON.
-    if types.is_dataframe(type(value)):
-        return {
-            "columns": value.columns.tolist(),
-            "data": format_dataframe_values(value),
-        }
-
-    # Convert datetime objects to str.
-    if types.is_datetime(type(value)):
-        return str(value)
-
-    # Convert Image objects to base64.
-    if types.is_image(type(value)):
-        return format_image_data(value)  # type: ignore
-
-    raise TypeError(
-        "State vars must be primitive Python types, "
-        "or subclasses of rx.Base. "
-        f"Got var of type {type(value)}."
-    )
+    raise TypeError(f"No JSON serializer found for var {value} of type {type(value)}.")
 
 
 def format_ref(ref: str) -> str:
@@ -557,45 +531,6 @@ def format_array_ref(refs: str, idx: Var | None) -> str:
         idx.is_local = True
         return f"refs_{clean_ref}[{idx}]"
     return f"refs_{clean_ref}"
-
-
-def format_dict(prop: ComponentStyle) -> str:
-    """Format a dict with vars potentially as values.
-
-    Args:
-        prop: The dict to format.
-
-    Returns:
-        The formatted dict.
-    """
-    # Import here to avoid circular imports.
-    from reflex.vars import Var
-
-    # Convert any var keys to strings.
-    prop = {key: str(val) if isinstance(val, Var) else val for key, val in prop.items()}
-
-    # Dump the dict to a string.
-    fprop = json_dumps(prop)
-
-    def unescape_double_quotes_in_var(m: re.Match) -> str:
-        # Since the outer quotes are removed, the inner escaped quotes must be unescaped.
-        return re.sub('\\\\"', '"', m.group(1))
-
-    # This substitution is necessary to unwrap var values.
-    fprop = re.sub(
-        pattern=r"""
-            (?<!\\)      # must NOT start with a backslash
-            "            # match opening double quote of JSON value
-            {(.*?)}      # extract the value between curly braces (non-greedy)
-            "            # match must end with an unescaped double quote
-        """,
-        repl=unescape_double_quotes_in_var,
-        string=fprop,
-        flags=re.VERBOSE,
-    )
-
-    # Return the formatted dict.
-    return fprop
 
 
 def format_breadcrumbs(route: str) -> list[tuple[str, str]]:
