@@ -1551,7 +1551,7 @@ class Cookie(ClientStorageBase, str):
         object: Any = "",
         encoding: str | None = None,
         errors: str | None = None,
-        /,
+        ,
         name: str | None = None,
         path: str = "/",
         max_age: int | None = None,
