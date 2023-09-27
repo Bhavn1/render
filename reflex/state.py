@@ -1600,7 +1600,6 @@ class LocalStorage(ClientStorageBase, str):
         object: Any = "",
         encoding: str | None = None,
         errors: str | None = None,
-        /,
         name: str | None = None,
     ) -> "LocalStorage":
         """Create a client-side localStorage (str).
